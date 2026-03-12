@@ -2,13 +2,9 @@ package com.gym.management.gym_management_api.controllers;
 
 import com.gym.management.gym_management_api.models.Member;
 import com.gym.management.gym_management_api.models.Trainer;
-import com.gym.management.gym_management_api.repositories.MemberRepository;
-import com.gym.management.gym_management_api.repositories.TrainerRepository;
+import com.gym.management.gym_management_api.services.MemberService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,26 +17,21 @@ import java.util.Map;
 public class MemberController {
     
     @Autowired
-    private MemberRepository memberRepository;
-    
-    @Autowired
-    private TrainerRepository trainerRepository;
+    private MemberService memberService;
     
     @PostMapping
     public ResponseEntity<Map<String, Object>> createMember(@RequestBody Member member) {
-        if (memberRepository.existsByEmail(member.getEmail())) {
+        try {
+            Member saved = memberService.createMember(member);
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Member created successfully");
+            response.put("data", saved);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (RuntimeException e) {
             Map<String, Object> error = new HashMap<>();
-            error.put("message", "Email already exists");
+            error.put("message", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         }
-        
-        Member saved = memberRepository.save(member);
-        
-        Map<String, Object> response = new HashMap<>();
-        response.put("message", "Member created successfully");
-        response.put("data", saved);
-        
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
     
     @GetMapping
@@ -49,23 +40,21 @@ public class MemberController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "firstName") String sort,
             @RequestParam(defaultValue = "asc") String direction) {
-        
-        Sort.Direction sortDirection = direction.equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, sort));
-        
-        return ResponseEntity.ok(memberRepository.findAll(pageable));
+        return ResponseEntity.ok(memberService.getAllMembers(page, size, sort, direction));
     }
     
     @GetMapping("/{id}")
     public ResponseEntity<Member> getMemberById(@PathVariable String id) {
-        return memberRepository.findById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        try {
+            return ResponseEntity.ok(memberService.getMemberById(id));
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
     
     @GetMapping("/check-email")
     public ResponseEntity<Boolean> checkEmailExists(@RequestParam String email) {
-        return ResponseEntity.ok(memberRepository.existsByEmail(email));
+        return ResponseEntity.ok(memberService.checkEmailExists(email));
     }
     
     @GetMapping("/province/{name}")
@@ -73,8 +62,7 @@ public class MemberController {
             @PathVariable String name,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(memberRepository.findByProvinceName(name, pageable));
+        return ResponseEntity.ok(memberService.getMembersByProvince(name, page, size));
     }
     
     @GetMapping("/district/{name}")
@@ -82,8 +70,7 @@ public class MemberController {
             @PathVariable String name,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(memberRepository.findByDistrictName(name, pageable));
+        return ResponseEntity.ok(memberService.getMembersByDistrict(name, page, size));
     }
     
     @GetMapping("/sector/{name}")
@@ -91,8 +78,7 @@ public class MemberController {
             @PathVariable String name,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(memberRepository.findBySectorName(name, pageable));
+        return ResponseEntity.ok(memberService.getMembersBySector(name, page, size));
     }
     
     @GetMapping("/cell/{name}")
@@ -100,8 +86,7 @@ public class MemberController {
             @PathVariable String name,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(memberRepository.findByCellName(name, pageable));
+        return ResponseEntity.ok(memberService.getMembersByCell(name, page, size));
     }
     
     @GetMapping("/village/{name}")
@@ -109,67 +94,57 @@ public class MemberController {
             @PathVariable String name,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(memberRepository.findByVillageName(name, pageable));
+        return ResponseEntity.ok(memberService.getMembersByVillage(name, page, size));
     }
     
     @PostMapping("/{memberId}/trainers/{trainerId}")
     public ResponseEntity<Map<String, String>> assignTrainer(
             @PathVariable String memberId,
             @PathVariable String trainerId) {
-        
-        Member member = memberRepository.findById(memberId).orElse(null);
-        Trainer trainer = trainerRepository.findById(trainerId).orElse(null);
-        
-        if (member == null || trainer == null) {
+        try {
+            memberService.assignTrainer(memberId, trainerId);
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "Trainer assigned successfully");
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
             Map<String, String> error = new HashMap<>();
-            error.put("message", "Member or Trainer not found");
+            error.put("message", e.getMessage());
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
         }
-        
-        member.getTrainers().add(trainer);
-        memberRepository.save(member);
-        
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "Trainer assigned successfully");
-        
-        return ResponseEntity.ok(response);
     }
     
     @GetMapping("/{memberId}/trainers")
     public ResponseEntity<List<Trainer>> getMemberTrainers(@PathVariable String memberId) {
-        return memberRepository.findById(memberId)
-                .map(member -> ResponseEntity.ok(member.getTrainers()))
-                .orElse(ResponseEntity.notFound().build());
+        try {
+            Member member = memberService.getMemberById(memberId);
+            return ResponseEntity.ok(member.getTrainers());
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
     
     @PutMapping("/{id}")
     public ResponseEntity<Map<String, Object>> updateMember(@PathVariable String id, @RequestBody Member member) {
-        if (!memberRepository.existsById(id)) {
+        try {
+            Member updated = memberService.updateMember(id, member);
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Member updated successfully");
+            response.put("data", updated);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
-        
-        member.setId(id);
-        Member updated = memberRepository.save(member);
-        
-        Map<String, Object> response = new HashMap<>();
-        response.put("message", "Member updated successfully");
-        response.put("data", updated);
-        
-        return ResponseEntity.ok(response);
     }
     
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, String>> deleteMember(@PathVariable String id) {
-        if (!memberRepository.existsById(id)) {
+        try {
+            memberService.deleteMember(id);
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "Member deleted successfully");
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
-        
-        memberRepository.deleteById(id);
-        
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "Member deleted successfully");
-        
-        return ResponseEntity.ok(response);
     }
 }
