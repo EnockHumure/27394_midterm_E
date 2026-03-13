@@ -1,0 +1,9 @@
+@echo off
+echo Killing processes on port 8080, 8081, 8082...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8080') do taskkill /F /PID %%a 2>nul
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8081') do taskkill /F /PID %%a 2>nul
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8082') do taskkill /F /PID %%a 2>nul
+echo Waiting 2 seconds...
+timeout /t 2 /nobreak >nul
+echo Starting application on port 8081...
+mvn spring-boot:run
